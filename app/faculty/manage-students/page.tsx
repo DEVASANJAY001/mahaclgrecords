@@ -11,31 +11,6 @@ import { Input } from '@/components/ui/input'
 import { createClient } from '@/lib/supabase'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatDOB } from '@/lib/date-utils'
-import DashboardLayout from '@/components/dashboard-layout'
-import { cn } from '@/lib/utils'
-import {
-  Search,
-  Filter,
-  UserPlus,
-  GraduationCap,
-  Users,
-  Calendar,
-  Trash2,
-  Edit,
-  ChevronRight,
-  LayoutDashboard,
-  PlusCircle,
-  ListOrdered,
-  FileText
-} from 'lucide-react'
-import { Skeleton } from '@/components/ui/skeleton'
-
-const navItems = [
-  { label: 'Overview', href: '/faculty/dashboard', icon: LayoutDashboard },
-  { label: 'Manage Students', href: '/faculty/manage-students', icon: Users },
-  { label: 'Add Marks', href: '/faculty/add-marks', icon: PlusCircle },
-  { label: 'Marks List', href: '/faculty/marks-list', icon: ListOrdered },
-]
 
 interface Faculty {
   id: string
@@ -81,7 +56,7 @@ export default function ManageStudents() {
     const checkAuth = async () => {
       try {
         const facultyId = localStorage.getItem('faculty_id')
-
+        
         if (!facultyId) {
           router.push('/faculty/login')
           return
@@ -100,6 +75,7 @@ export default function ManageStudents() {
         setFaculty(facultyArray[0])
         loadData(facultyId)
       } catch (err) {
+        console.error('Auth error:', err)
         router.push('/faculty/login')
       }
     }
@@ -137,7 +113,7 @@ export default function ManageStudents() {
       setDepartments(deptsData || [])
 
       if (deptsData && deptsData.length > 0) {
-        const deptIds = deptsData.map((d: any) => d.id)
+        const deptIds = deptsData.map(d => d.id)
         const { data: studentsData } = await supabase
           .from('students')
           .select('*, departments(name)')
@@ -153,6 +129,7 @@ export default function ManageStudents() {
 
       setLoading(false)
     } catch (err) {
+      console.error('Load error:', err)
       setLoading(false)
     }
   }
@@ -195,7 +172,7 @@ export default function ManageStudents() {
       setDob('')
       setSelectedDept('')
       setStudentLoading(false)
-
+      
       // Reload after showing success
       setTimeout(() => {
         setError('')
@@ -208,300 +185,237 @@ export default function ManageStudents() {
   }
 
   const handleLogout = async () => {
-    localStorage.removeItem('faculty_id')
-    localStorage.removeItem('faculty_email')
     await supabase.auth.signOut()
     router.push('/')
   }
 
-  const LoadingSkeleton = () => (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-2">
-          <Skeleton className="h-10 w-64 text-foreground" />
-          <Skeleton className="h-5 w-96 text-muted-foreground" />
-        </div>
-        <Skeleton className="h-10 w-40" />
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-slate-600">Loading...</p>
       </div>
-      <div className="flex gap-4">
-        <Skeleton className="h-12 w-48 rounded-2xl" />
-        <Skeleton className="h-12 w-48 rounded-2xl" />
-      </div>
-      <Card className="border-none shadow-premium h-24 w-full rounded-2xl" />
-      <Card className="border-none shadow-premium h-64 w-full rounded-2xl" />
-    </div>
-  )
+    )
+  }
 
   return (
-    <DashboardLayout
-      navItems={navItems}
-      userName={faculty?.name || 'Faculty'}
-      userRole="Administrator"
-      onLogout={handleLogout}
-    >
-      {loading ? <LoadingSkeleton /> : (
-        <>
-          {/* Page Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight text-foreground">
-                Student Management
-              </h1>
-              <p className="text-muted-foreground mt-1 text-lg">
-                Register new students and manage existing academic profiles.
-              </p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link href="/faculty/dashboard">
+                <Button variant="outline" className="text-purple-600 bg-transparent">
+                  ← Dashboard
+                </Button>
+              </Link>
+              <div>
+                <h1 className="font-bold text-slate-900">Manage Students</h1>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
+            <Button 
+              onClick={handleLogout}
+              variant="outline"
+              className="text-purple-600 bg-transparent"
+            >
+              Logout
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+            {error}
+          </div>
+        )}
+
+        <Tabs defaultValue="add" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="add">Add Student</TabsTrigger>
+            <TabsTrigger value="list">Student List</TabsTrigger>
+          </TabsList>
+
+          {/* Add Student Tab */}
+          <TabsContent value="add" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Add New Student</CardTitle>
+                <CardDescription>Create a new student account</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleCreateStudent} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Select Department
+                    </label>
+                    <select
+                      value={selectedDept}
+                      onChange={(e) => setSelectedDept(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      required
+                    >
+                      <option value="">-- Select Department --</option>
+                      {departments.map((dept) => (
+                        <option key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <Input
+                    placeholder="Student Name"
+                    value={studentName}
+                    onChange={(e) => setStudentName(e.target.value)}
+                    required
+                  />
+
+                  <Input
+                    placeholder="Roll Number"
+                    value={rollNumber}
+                    onChange={(e) => setRollNumber(e.target.value)}
+                    required
+                  />
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Date of Birth - This will be the login credential
+                    </label>
+                    <Input
+                      type="date"
+                      value={dob}
+                      onChange={(e) => setDob(e.target.value)}
+                      required
+                      max={new Date().toISOString().split('T')[0]}
+                    />
+                    {dob && (
+                      <p className="text-xs text-green-600 mt-2 font-semibold">
+                        ✓ Selected: {new Date(dob).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                      </p>
+                    )}
+                  </div>
+
+                  <Button 
+                    type="submit"
+                    disabled={studentLoading}
+                    className="w-full bg-purple-600 hover:bg-purple-700"
+                  >
+                    {studentLoading ? 'Creating...' : 'Add Student'}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Student List Tab */}
+          <TabsContent value="list" className="space-y-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-slate-900">Students List</h3>
               <Link href="/faculty/add-marks">
-                <Button className="gap-2 shadow-premium bg-primary hover:bg-primary/90">
-                  <PlusCircle size={18} />
-                  Add Marks
+                <Button className="bg-purple-600 hover:bg-purple-700">
+                  Enter Marks
                 </Button>
               </Link>
             </div>
-          </div>
 
-          {error && (
-            <div className={cn(
-              "px-6 py-4 rounded-2xl animate-in fade-in slide-in-from-top-4 border",
-              error.includes('✓')
-                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
-                : "bg-destructive/10 border-destructive/20 text-destructive"
-            )}>
-              <p className="font-bold flex items-center gap-2">
-                <span>{error.includes('✓') ? '✨' : '⚠️'}</span> {error}
-              </p>
+            {/* Search and Filter */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Search (Roll No. or Name)
+                </label>
+                <Input
+                  placeholder="Search students..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Filter by Department
+                </label>
+                <select
+                  value={selectedFilterDept}
+                  onChange={(e) => setSelectedFilterDept(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="">-- All Departments --</option>
+                  {departments.map((dept) => (
+                    <option key={dept.id} value={dept.id}>
+                      {dept.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-end">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('')
+                    setSelectedFilterDept('')
+                  }}
+                  variant="outline"
+                  className="w-full bg-transparent border-slate-300"
+                >
+                  Clear Filters
+                </Button>
+              </div>
             </div>
-          )}
 
-          <Tabs defaultValue="list" className="w-full space-y-8">
-            <div className="flex items-center justify-between">
-              <TabsList className="bg-secondary/50 p-1 rounded-2xl border border-border/50">
-                <TabsTrigger value="list" className="rounded-xl px-8 py-2.5 data-[state=active]:shadow-premium">Student Directory</TabsTrigger>
-                <TabsTrigger value="add" className="rounded-xl px-8 py-2.5 data-[state=active]:shadow-premium">Register New Student</TabsTrigger>
-              </TabsList>
+            {/* Results Info */}
+            <p className="text-sm text-slate-600 mb-2">
+              Showing {filteredStudents.length} of {students.length} students
+            </p>
+
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-slate-100">
+                    <th className="border border-slate-300 px-4 py-2 text-left text-sm font-semibold">Roll No.</th>
+                    <th className="border border-slate-300 px-4 py-2 text-left text-sm font-semibold">Name</th>
+                    <th className="border border-slate-300 px-4 py-2 text-left text-sm font-semibold">Department</th>
+                    <th className="border border-slate-300 px-4 py-2 text-left text-sm font-semibold">DOB</th>
+                    <th className="border border-slate-300 px-4 py-2 text-center text-sm font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredStudents.map((student) => (
+                    <tr key={student.id} className="hover:bg-slate-50">
+                      <td className="border border-slate-300 px-4 py-2 font-medium text-purple-700">{student.roll_number}</td>
+                      <td className="border border-slate-300 px-4 py-2">{student.name}</td>
+                      <td className="border border-slate-300 px-4 py-2 text-sm text-slate-600">{student.department_name}</td>
+                      <td className="border border-slate-300 px-4 py-2">
+                        {formatDOB(student.date_of_birth)}
+                      </td>
+                      <td className="border border-slate-300 px-4 py-2 text-center">
+                        <Link href={`/faculty/marks-list`}>
+                          <Button 
+                            size="sm" 
+                            className="bg-blue-600 hover:bg-blue-700 text-white text-xs"
+                            title="View marksheet for this student"
+                          >
+                            View Marksheet
+                          </Button>
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredStudents.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="border border-slate-300 px-4 py-2 text-center text-slate-600">
+                        {searchQuery || selectedFilterDept ? 'No students match your filters.' : 'No students yet. Add one above.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-
-            {/* Student List Tab */}
-            <TabsContent value="list" className="space-y-6">
-              {/* Advanced Filters */}
-              <Card className="border-none shadow-premium bg-card/50 backdrop-blur-sm overflow-visible z-20">
-                <CardContent className="pt-6">
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-end">
-                    <div className="md:col-span-5 space-y-2">
-                      <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest pl-1">Search Database</label>
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-                        <Input
-                          placeholder="Search by name or roll number..."
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="pl-10 rounded-xl border-border/50 h-11 bg-background"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="md:col-span-4 space-y-2">
-                      <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest pl-1">Filter by Department</label>
-                      <div className="relative">
-                        <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-                        <select
-                          value={selectedFilterDept}
-                          onChange={(e) => setSelectedFilterDept(e.target.value)}
-                          className="w-full pl-10 pr-4 h-11 bg-background border border-border/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary font-medium text-sm appearance-none cursor-pointer"
-                        >
-                          <option value="">All Departments</option>
-                          {departments.map((dept) => (
-                            <option key={dept.id} value={dept.id}>{dept.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="md:col-span-3">
-                      <Button
-                        onClick={() => {
-                          setSearchQuery('')
-                          setSelectedFilterDept('')
-                        }}
-                        variant="outline"
-                        className="w-full h-11 rounded-xl border-border/50 bg-background hover:bg-secondary transition-all"
-                      >
-                        Reset Filters
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Data Table */}
-              <Card className="border-none shadow-premium overflow-hidden bg-card/50 backdrop-blur-sm">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-muted/50 border-b border-border">
-                        <th className="px-6 py-4 text-left text-xs font-black text-muted-foreground uppercase tracking-wider">Student Identification</th>
-                        <th className="px-6 py-4 text-left text-xs font-black text-muted-foreground uppercase tracking-wider">Department</th>
-                        <th className="px-6 py-4 text-left text-xs font-black text-muted-foreground uppercase tracking-wider">Date of Birth</th>
-                        <th className="px-6 py-4 text-center text-xs font-black text-muted-foreground uppercase tracking-wider">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/50">
-                      {filteredStudents.map((student) => (
-                        <tr key={student.id} className="group hover:bg-primary/5 transition-colors">
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm border border-primary/20">
-                                {student.name.charAt(0)}
-                              </div>
-                              <div>
-                                <p className="font-bold text-foreground leading-tight">{student.name}</p>
-                                <p className="text-xs font-black text-primary uppercase tracking-tighter mt-0.5">{student.roll_number}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="px-3 py-1 rounded-full bg-secondary text-secondary-foreground text-[10px] font-black uppercase border border-border/50">
-                              {student.department_name}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Calendar size={14} />
-                              {formatDOB(student.date_of_birth)}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <Link href={`/faculty/marks-list`}>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-primary hover:text-primary-foreground hover:bg-primary rounded-lg group-hover:scale-105 transition-all gap-1.5"
-                              >
-                                <FileText size={14} />
-                                View Records
-                                <ChevronRight size={14} />
-                              </Button>
-                            </Link>
-                          </td>
-                        </tr>
-                      ))}
-                      {filteredStudents.length === 0 && (
-                        <tr>
-                          <td colSpan={4} className="px-6 py-12 text-center">
-                            <div className="flex flex-col items-center gap-2 opacity-30">
-                              <Users size={48} />
-                              <p className="font-bold text-lg">No Matching Records</p>
-                              <p className="text-sm">Try adjusting your search or filters</p>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-                {filteredStudents.length > 0 && (
-                  <div className="px-6 py-4 bg-muted/30 border-t border-border flex justify-between items-center">
-                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                      Showing {filteredStudents.length} of {students.length} Total Students
-                    </p>
-                  </div>
-                )}
-              </Card>
-            </TabsContent>
-
-            {/* Add Student Tab */}
-            <TabsContent value="add" className="max-w-2xl mx-auto">
-              <Card className="border-none shadow-premium bg-card/50 backdrop-blur-sm relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-2 h-full bg-primary" />
-                <CardHeader>
-                  <CardTitle className="text-2xl font-bold">New Registration</CardTitle>
-                  <CardDescription>Create a secure profile for an incoming student.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleCreateStudent} className="space-y-6">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest pl-1">Target Department</label>
-                      <select
-                        value={selectedDept}
-                        onChange={(e) => setSelectedDept(e.target.value)}
-                        className="w-full px-4 h-12 bg-background border border-border/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary font-medium appearance-none cursor-pointer"
-                        required
-                      >
-                        <option value="">Select Department...</option>
-                        {departments.map((dept) => (
-                          <option key={dept.id} value={dept.id}>{dept.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest pl-1">Full Student Name</label>
-                        <Input
-                          placeholder="e.g. Rahul Sharma"
-                          value={studentName}
-                          onChange={(e) => setStudentName(e.target.value)}
-                          required
-                          className="rounded-xl border-border/50 h-12 bg-background"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest pl-1">Unique Roll Number</label>
-                        <Input
-                          placeholder="e.g. 24CS001"
-                          value={rollNumber}
-                          onChange={(e) => setRollNumber(e.target.value)}
-                          required
-                          className="rounded-xl border-border/50 h-12 bg-background"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest pl-1">Date of Birth (Login Credential)</label>
-                      <div className="relative">
-                        <Input
-                          type="date"
-                          value={dob}
-                          onChange={(e) => setDob(e.target.value)}
-                          required
-                          max={new Date().toISOString().split('T')[0]}
-                          className="rounded-xl border-border/50 h-12 bg-background pr-10"
-                        />
-                      </div>
-                      {dob && (
-                        <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-emerald-600 text-xs font-bold animate-in fade-in zoom-in-95">
-                          <GraduationCap size={14} />
-                          Login Password Set: {new Date(dob).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                        </div>
-                      )}
-                    </div>
-
-                    <Button
-                      type="submit"
-                      disabled={studentLoading}
-                      className="w-full h-12 rounded-xl shadow-premium font-bold text-lg transition-all"
-                    >
-                      {studentLoading ? (
-                        <span className="flex items-center gap-2">
-                          <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                          Finalizing Registration...
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-2">
-                          <UserPlus size={20} />
-                          Complete Registration
-                        </span>
-                      )}
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        </>
-      )}
-    </DashboardLayout>
+          </TabsContent>
+        </Tabs>
+      </main>
+    </div>
   )
 }

@@ -9,30 +9,6 @@ import { createClient } from '@/lib/supabase'
 import { Session } from '@supabase/supabase-js'
 import Chatbot from '@/components/chatbot'
 import { formatDOB } from '@/lib/date-utils'
-import DashboardLayout from '@/components/dashboard-layout'
-import { cn } from '@/lib/utils'
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  AreaChart,
-  Area
-} from 'recharts'
-import {
-  LayoutDashboard,
-  FileText,
-  UserCircle,
-  TrendingUp,
-  Award,
-  BookOpen,
-  Calendar,
-  X
-} from 'lucide-react'
-import { Skeleton } from '@/components/ui/skeleton'
 
 interface StudentData {
   roll_number: string
@@ -86,12 +62,16 @@ export default function StudentDashboard() {
         const studentId = localStorage.getItem('student_id')
         const studentName = localStorage.getItem('student_name')
 
+        console.log('[v0] Dashboard auth check - Student ID:', studentId)
+        console.log('[v0] Dashboard loading state initialized')
 
         if (!studentId || !studentName) {
+          console.log('[v0] No student credentials found, redirecting to login')
           router.push('/student/login')
           return
         }
 
+        console.log('[v0] Fetching student data from database...')
 
         // Get student details
         const { data: studentArray, error: fetchError } = await supabase
@@ -99,14 +79,22 @@ export default function StudentDashboard() {
           .select('*, departments(name)')
           .eq('id', studentId)
 
+        console.log('[v0] Student fetch result:', { studentArray, fetchError })
 
+        if (fetchError) {
+          console.error('[v0] Error fetching student:', fetchError)
+          setLoading(false)
+          return
+        }
 
         if (!studentArray || studentArray.length === 0) {
+          console.log('[v0] Student not found in database')
           setLoading(false)
           return
         }
 
         const studentData = studentArray[0]
+        console.log('[v0] Student data:', studentData)
 
         const formattedStudent = {
           roll_number: studentData.roll_number,
@@ -123,6 +111,7 @@ export default function StudentDashboard() {
           .select('*, subjects(name, code), exam_types(id, name)')
           .eq('student_id', studentId)
 
+        console.log('[v0] Marks fetch result:', { marksData, marksError })
 
         const formattedMarks = (marksData || []).map((m: any) => ({
           subject_name: m.subjects?.name || 'Unknown',
@@ -136,7 +125,7 @@ export default function StudentDashboard() {
 
         // Create exam cards grouped by exam type
         const examMap = new Map<string, { exam_type: string; marks: number[] }>()
-        formattedMarks.forEach((mark: any) => {
+        formattedMarks.forEach(mark => {
           const key = mark.exam_type_id
           if (!examMap.has(key)) {
             examMap.set(key, { exam_type: mark.exam_type, marks: [] })
@@ -148,18 +137,18 @@ export default function StudentDashboard() {
           exam_type_id: id,
           exam_type: data.exam_type,
           subject_count: data.marks.length,
-          totalMarks: data.marks.reduce((a: number, b: number) => a + b, 0),
-          averageMarks: Math.round((data.marks.reduce((a: number, b: number) => a + b, 0) / data.marks.length) * 100) / 100,
+          totalMarks: data.marks.reduce((a, b) => a + b, 0),
+          averageMarks: Math.round((data.marks.reduce((a, b) => a + b, 0) / data.marks.length) * 100) / 100,
         }))
 
         setExamCards(cards)
 
         // Calculate stats
         if (formattedMarks.length > 0) {
-          const totalMarks = formattedMarks.reduce((sum: number, m: any) => sum + m.marks, 0)
+          const totalMarks = formattedMarks.reduce((sum, m) => sum + m.marks, 0)
           const averageMarks = totalMarks / formattedMarks.length
-          const highestMark = Math.max(...formattedMarks.map((m: any) => m.marks))
-          const subjectsCount = new Set(formattedMarks.map((m: any) => m.subject_code)).size
+          const highestMark = Math.max(...formattedMarks.map(m => m.marks))
+          const subjectsCount = new Set(formattedMarks.map(m => m.subject_code)).size
 
           setStats({
             totalMarks,
@@ -169,8 +158,10 @@ export default function StudentDashboard() {
           })
         }
 
+        console.log('[v0] Dashboard data loaded successfully')
         setLoading(false)
       } catch (err) {
+        console.error('[v0] Load error:', err)
         setLoading(false)
       }
     }
@@ -185,11 +176,9 @@ export default function StudentDashboard() {
 
       // Create a temporary element with the marksheet content
       const element = document.createElement('div')
-      element.id = 'marksheet-to-export'
-      element.style.background = 'white'
       const examName = examCards.find(e => e.exam_type_id === selectedExamId)?.exam_type
       const examMarks = marks.filter(m => m.exam_type_id === selectedExamId)
-
+      
       element.innerHTML = `
         <div style="font-family: Arial, sans-serif; padding: 40px;">
           <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px;">
@@ -264,27 +253,14 @@ export default function StudentDashboard() {
       const opt = {
         margin: 5,
         filename: `${examName}_marksheet_${student?.roll_number}_${new Date().getTime()}.pdf`,
-        image: { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas: {
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { 
           scale: 2,
           useCORS: true,
           logging: false,
-          backgroundColor: '#ffffff',
-          onclone: (clonedDoc: Document) => {
-            // Aggressively remove all global styles that might contain oklch/lab colors
-            // that crash html2canvas
-            const styles = clonedDoc.querySelectorAll('style, link[rel="stylesheet"]')
-            styles.forEach(s => s.remove())
-
-            const el = clonedDoc.getElementById('marksheet-to-export')
-            if (el) {
-              el.style.background = 'white'
-              el.style.color = 'black'
-              el.style.display = 'block'
-            }
-          }
+          backgroundColor: '#ffffff'
         },
-        jsPDF: { orientation: 'portrait' as const, unit: 'mm' as const, format: 'a4' as const },
+        jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' },
       }
 
       await html2pdf().set(opt).from(element).save()
@@ -296,10 +272,94 @@ export default function StudentDashboard() {
     }
   }
 
+  const handleLogout = async () => {
+    localStorage.removeItem('student_id')
+    localStorage.removeItem('student_name')
+    router.push('/student/login')
+  }
+
+  const MarksheetPreview = ({ examTypeId, examTypeName }: { examTypeId: string; examTypeName: string }) => {
+    const examMarks = marks.filter(m => m.exam_type_id === examTypeId)
+    
+    return (
+      <div style={{ fontFamily: 'Arial, sans-serif', padding: '40px', background: 'white' }}>
+        <div style={{ textAlign: 'center', marginBottom: '30px', borderBottom: '2px solid #e2e8f0', paddingBottom: '20px' }}>
+          <img 
+            src="/images/maha-logo.png" 
+            alt="College Logo" 
+            style={{ height: '80px', marginBottom: '15px' }}
+          />
+          <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e293b', margin: '10px 0' }}>MAHALASHMI</h1>
+          <p style={{ color: '#475569', margin: '5px 0' }}>Women's College of Arts and Science</p>
+          <p style={{ color: '#475569', fontSize: '14px', margin: '5px 0' }}>(Affiliated to University of Madras)</p>
+          <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e293b', marginTop: '15px' }}>ACADEMIC MARK SHEET - {examTypeName}</h2>
+        </div>
+
+        <div style={{ marginBottom: '25px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+            <div>
+              <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Roll Number</p>
+              <p style={{ fontWeight: 'bold', color: '#1e293b', margin: '5px 0' }}>{student?.roll_number}</p>
+            </div>
+            <div>
+              <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Name</p>
+              <p style={{ fontWeight: 'bold', color: '#1e293b', margin: '5px 0' }}>{student?.name}</p>
+            </div>
+            <div>
+              <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Department</p>
+              <p style={{ fontWeight: 'bold', color: '#1e293b', margin: '5px 0' }}>{student?.department_name}</p>
+            </div>
+            <div>
+              <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Date of Birth</p>
+              <p style={{ fontWeight: 'bold', color: '#1e293b', margin: '5px 0' }}>{formatDOB(student?.dob || '')}</p>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: '25px' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#1e293b', marginBottom: '10px' }}>Academic Performance</h3>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#e2e8f0' }}>
+                <th style={{ border: '1px solid #cbd5e1', padding: '10px', textAlign: 'left', fontWeight: 'bold' }}>Subject Code</th>
+                <th style={{ border: '1px solid #cbd5e1', padding: '10px', textAlign: 'left', fontWeight: 'bold' }}>Subject Name</th>
+                <th style={{ border: '1px solid #cbd5e1', padding: '10px', textAlign: 'center', fontWeight: 'bold' }}>Marks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {examMarks.map((mark, idx) => (
+                <tr key={idx}>
+                  <td style={{ border: '1px solid #cbd5e1', padding: '8px' }}>{mark.subject_code}</td>
+                  <td style={{ border: '1px solid #cbd5e1', padding: '8px' }}>{mark.subject_name}</td>
+                  <td style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'center', fontWeight: 'bold' }}>{mark.marks}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{ borderTop: '2px solid #e2e8f0', paddingTop: '25px', marginTop: '25px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '30px', textAlign: 'center' }}>
+            <div>
+              <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '50px' }}>Principal</p>
+              <p style={{ fontSize: '12px', color: '#64748b' }}>Mahalashmi Women's College</p>
+            </div>
+            <div>
+              <p style={{ fontSize: '12px', color: '#64748b' }}>{new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            </div>
+            <div>
+              <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '50px' }}>Authorized Signature</p>
+              <p style={{ fontSize: '12px', color: '#64748b' }}>Date: {new Date().toLocaleDateString()}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const getMarksheetHTML = (examTypeId: string, examTypeName: string) => {
     const examMarks = marks.filter(m => m.exam_type_id === examTypeId)
-
+    
     return `
       <div style="font-family: Arial, sans-serif; padding: 40px; background: white;">
         <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px;">
@@ -383,14 +443,14 @@ export default function StudentDashboard() {
       const opt = {
         margin: 5,
         filename: `${previewExamType}_marksheet_${student?.roll_number}_${new Date().getTime()}.pdf`,
-        image: { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas: {
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { 
           scale: 2,
           useCORS: true,
           logging: false,
           backgroundColor: '#ffffff'
         },
-        jsPDF: { orientation: 'portrait' as const, unit: 'mm' as const, format: 'a4' as const },
+        jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' },
       }
 
       await html2pdf().set(opt).from(element).save()
@@ -403,279 +463,164 @@ export default function StudentDashboard() {
     }
   }
 
-  const LoadingSkeleton = () => (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-2">
-          <Skeleton className="h-10 w-64" />
-          <Skeleton className="h-5 w-96" />
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 mb-4">
+            <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+          <p className="text-slate-600 font-medium">Loading your dashboard...</p>
+          <p className="text-slate-500 text-sm mt-2">Please wait while we fetch your information</p>
         </div>
-        <div className="flex gap-4">
-          <Skeleton className="h-10 w-40" />
-          <Skeleton className="h-10 w-40" />
-        </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[1, 2, 3, 4].map((i) => (
-          <Skeleton key={i} className="h-32 w-full rounded-2xl" />
-        ))}
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <Skeleton className="lg:col-span-2 h-[450px] w-full rounded-2xl" />
-        <Skeleton className="h-[450px] w-full rounded-2xl" />
-      </div>
-    </div>
-  )
-
-  const navItems = [
-    { label: 'Dashboard', href: '/student/dashboard', icon: LayoutDashboard },
-    { label: 'Academic Records', href: '#marks-section', icon: FileText },
-    { label: 'Profile', href: '#profile', icon: UserCircle },
-  ]
-
-  const handleLogout = () => {
-    localStorage.removeItem('student_id')
-    localStorage.removeItem('student_name')
-    router.push('/')
+    )
   }
 
-  // Prepare chart data - trend of marks over exams
-  const chartData = [...examCards].reverse().map(card => ({
-    name: card.exam_type,
-    avg: card.averageMarks,
-    total: card.totalMarks
-  }))
+  if (!student) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+        <div className="text-center">
+          <p className="text-slate-600 font-medium mb-4">Unable to load student data</p>
+          <Button onClick={() => router.push('/student/login')}>
+            Return to Login
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <DashboardLayout
-      navItems={navItems}
-      userName={student?.name || 'Student'}
-      userRole="Student"
-      onLogout={handleLogout}
-    >
-      {loading ? <LoadingSkeleton /> : (
-        <>
-          {/* Welcome Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 lg:gap-4">
-            <div>
-              <h1 className="text-xl lg:text-3xl font-bold tracking-tight text-foreground">
-                Welcome back, {student?.name?.split(' ')[0]}! 👋
-              </h1>
-              <p className="text-muted-foreground mt-1 text-sm lg:text-lg">
-                Your academic performance summary.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 lg:gap-3">
-              <Button variant="outline" size="sm" className="gap-2 border-border shadow-sm text-xs lg:text-sm">
-                <Calendar size={14} className="lg:w-4 lg:h-4" />
-                <span className="hidden sm:inline">Schedule</span>
-                <span className="sm:hidden text-[10px]">Schedule</span>
-              </Button>
-              <Button onClick={() => setShowChatbot(!showChatbot)} size="sm" className="gap-2 shadow-premium text-xs lg:text-sm">
-                {showChatbot ? 'Focus' : 'AI Help'}
-              </Button>
-            </div>
-          </div>
-
-          {/* Quick Stats */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-6">
-            <Card className="border-none shadow-premium bg-gradient-to-br from-primary/10 to-transparent">
-              <CardHeader className="p-3 lg:p-6 lg:pb-2">
-                <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-primary/20 flex items-center justify-center text-primary mb-1 lg:mb-2 text-xs">
-                  <TrendingUp size={16} className="lg:w-5 lg:h-5" />
-                </div>
-                <CardDescription className="text-muted-foreground font-medium text-[8px] lg:text-[10px] uppercase">Average Score</CardDescription>
-                <CardTitle className="text-xl lg:text-3xl font-bold">{stats?.averageMarks.toFixed(1)}%</CardTitle>
-              </CardHeader>
-            </Card>
-
-            <Card className="border-none shadow-premium">
-              <CardHeader className="p-3 lg:p-6 lg:pb-2">
-                <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600 mb-1 lg:mb-2 text-xs">
-                  <Award size={16} className="lg:w-5 lg:h-5" />
-                </div>
-                <CardDescription className="text-muted-foreground font-medium text-[8px] lg:text-[10px] uppercase">Total Marks</CardDescription>
-                <CardTitle className="text-xl lg:text-3xl font-bold">{stats?.totalMarks}</CardTitle>
-              </CardHeader>
-            </Card>
-
-            <Card className="border-none shadow-premium">
-              <CardHeader className="p-3 lg:p-6 lg:pb-2">
-                <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-600 mb-1 lg:mb-2 text-xs">
-                  <BookOpen size={16} className="lg:w-5 lg:h-5" />
-                </div>
-                <CardDescription className="text-muted-foreground font-medium text-[8px] lg:text-[10px] uppercase">Subjects</CardDescription>
-                <CardTitle className="text-xl lg:text-3xl font-bold">{stats?.subjectsCount}</CardTitle>
-              </CardHeader>
-            </Card>
-
-            <Card className="border-none shadow-premium">
-              <CardHeader className="p-3 lg:p-6 lg:pb-2">
-                <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-600 mb-1 lg:mb-2 text-xs">
-                  <FileText size={16} className="lg:w-5 lg:h-5" />
-                </div>
-                <CardDescription className="text-muted-foreground font-medium text-[8px] lg:text-[10px] uppercase">Exams</CardDescription>
-                <CardTitle className="text-xl lg:text-3xl font-bold">{examCards.length}</CardTitle>
-              </CardHeader>
-            </Card>
-          </div>
-
-          {/* Main Grid: Charts & Profile */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Performance Chart */}
-            <Card className="lg:col-span-2 border-none shadow-premium overflow-hidden bg-card/50 backdrop-blur-sm">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-xl">Performance Trend</CardTitle>
-                <CardDescription>Academic progress across the current semester</CardDescription>
-              </CardHeader>
-              <CardContent className="h-[350px] pl-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData}>
-                    <defs>
-                      <linearGradient id="colorAvg" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                    <XAxis
-                      dataKey="name"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
-                      dy={10}
-                    />
-                    <YAxis
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        borderRadius: '16px',
-                        border: '1px solid var(--border)',
-                        boxShadow: 'var(--shadow-premium)',
-                        backgroundColor: 'var(--card)',
-                        fontSize: '12px'
-                      }}
-                      itemStyle={{ fontWeight: 'bold' }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="avg"
-                      stroke="var(--primary)"
-                      strokeWidth={4}
-                      fillOpacity={1}
-                      fill="url(#colorAvg)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            {/* Profile Summary */}
-            <Card className="border-none shadow-premium bg-card/80 backdrop-blur-sm" id="profile">
-              <CardHeader>
-                <CardTitle className="text-xl">Student Identity</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center gap-4 p-5 rounded-2xl bg-secondary/80 border border-border/50">
-                  <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20 shadow-inner">
-                    <UserCircle size={40} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-bold text-lg text-foreground truncate">{student?.name}</p>
-                    <p className="text-sm text-muted-foreground truncate">{student?.department_name}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-4 px-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground font-bold uppercase tracking-widest flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                      Roll Number
-                    </span>
-                    <span className="font-bold text-foreground">{student?.roll_number}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground font-bold uppercase tracking-widest flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                      Date of Birth
-                    </span>
-                    <span className="font-bold text-foreground">{student?.dob}</span>
-                  </div>
-                </div>
-
-                <Button variant="outline" className="w-full mt-4 rounded-xl border-border hover:bg-secondary font-semibold">
-                  Manage Profile
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Exam Section */}
-          <div id="marks-section" className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <img 
+                src="/images/maha-logo.png" 
+                alt="Logo" 
+                className="h-10 w-auto"
+              />
               <div>
-                <h2 className="text-2xl font-bold tracking-tight text-foreground">Academic Records</h2>
-                <p className="text-muted-foreground text-sm mt-1">Official performance reports and certifications</p>
+                <h1 className="font-bold text-slate-900">Student Dashboard</h1>
+                <p className="text-xs text-slate-600">{student?.name}</p>
               </div>
             </div>
+            <Button 
+              onClick={handleLogout}
+              variant="outline"
+              className="text-purple-600 bg-transparent"
+            >
+              Logout
+            </Button>
+          </div>
+        </div>
+      </header>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Student Info */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>Your Profile</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div>
+                <p className="text-sm text-slate-600">Roll Number</p>
+                <p className="font-bold text-slate-900">{student?.roll_number}</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-600">Name</p>
+                <p className="font-bold text-slate-900">{student?.name}</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-600">Department</p>
+                <p className="font-bold text-slate-900">{student?.department_name}</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-600">Date of Birth</p>
+                <p className="font-bold text-slate-900">
+                  {formatDOB(student?.dob || '')}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Performance Stats */}
+        {stats && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm text-slate-600 mb-2">Total Marks</p>
+                <p className="text-3xl font-bold text-purple-600">{stats.totalMarks}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm text-slate-600 mb-2">Average Marks</p>
+                <p className="text-3xl font-bold text-blue-600">{stats.averageMarks}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm text-slate-600 mb-2">Highest Mark</p>
+                <p className="text-3xl font-bold text-green-600">{stats.highestMark}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm text-slate-600 mb-2">Subjects</p>
+                <p className="text-3xl font-bold text-orange-600">{stats.subjectsCount}</p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Exam Cards Section */}
+        {examCards.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-xl font-bold text-slate-900 mb-4">Exams</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {examCards.map((exam) => (
-                <Card
+                <Card 
                   key={exam.exam_type_id}
-                  className={cn(
-                    "group hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border-none relative overflow-hidden",
-                    selectedExamId === exam.exam_type_id ? "ring-2 ring-primary shadow-premium" : "shadow-premium"
-                  )}
+                  className="hover:shadow-lg transition-shadow border-l-4 border-l-purple-600"
                 >
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 group-hover:bg-primary/10 transition-all duration-500" />
-                  <CardHeader className="pb-4">
-                    <div className="flex justify-between items-start relative z-10">
-                      <div className="bg-secondary/80 p-2 rounded-xl border border-border/50 mb-3 group-hover:text-primary transition-colors">
-                        <FileText size={20} />
-                      </div>
-                      <div className="bg-primary/10 text-primary px-2 py-1 rounded-lg text-xs font-bold">
-                        {exam.averageMarks >= 40 ? 'QUALIFIED' : 'PENDING'}
-                      </div>
-                    </div>
-                    <CardTitle className="text-xl font-bold text-foreground group-hover:text-primary transition-colors">
-                      {exam.exam_type}
-                    </CardTitle>
-                    <CardDescription className="font-medium">{exam.subject_count} Subjects Reported</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-5 relative z-10">
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50 border border-border/30">
+                  <CardContent className="pt-6">
+                    <p className="text-sm font-medium text-slate-600 mb-2">{exam.exam_type}</p>
+                    <div className="space-y-3">
                       <div>
-                        <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Aggregate</p>
-                        <p className="text-xl font-black text-foreground">{exam.averageMarks.toFixed(1)}%</p>
+                        <p className="text-xs text-slate-500">Total Marks</p>
+                        <p className="text-2xl font-bold text-purple-600">{exam.totalMarks}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Score</p>
-                        <p className="text-xl font-black text-foreground">{exam.totalMarks}</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-xs text-slate-500">Average</p>
+                          <p className="font-semibold text-blue-600">{exam.averageMarks}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500">Subjects</p>
+                          <p className="font-semibold text-orange-600">{exam.subject_count}</p>
+                        </div>
                       </div>
                     </div>
-
-                    <div className="flex gap-2">
-                      <Button
-                        className="flex-1 rounded-xl shadow-sm font-bold"
-                        onClick={() => {
-                          setSelectedExamId(exam.exam_type_id === selectedExamId ? null : exam.exam_type_id)
-                        }}
-                      >
-                        Details
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        className="rounded-xl px-4 border border-border/50 hover:bg-primary hover:text-primary-foreground transition-all"
+                    <div className="pt-4 border-t border-slate-200 space-y-2">
+                      <Button 
                         onClick={() => {
                           setPreviewExamId(exam.exam_type_id)
                           setPreviewExamType(exam.exam_type)
                         }}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm"
                       >
-                        <FileText size={18} />
+                        Preview
+                      </Button>
+                      <Button 
+                        onClick={() => setSelectedExamId(exam.exam_type_id)}
+                        className="w-full bg-purple-600 hover:bg-purple-700 text-white text-sm"
+                      >
+                        View Details
                       </Button>
                     </div>
                   </CardContent>
@@ -683,138 +628,101 @@ export default function StudentDashboard() {
               ))}
             </div>
           </div>
+        )}
 
-          {/* Details Table - Only shown when an exam is selected */}
-          {selectedExamId && (
-            <Card className="border-none shadow-premium animate-in fade-in slide-in-from-bottom-5 duration-500 overflow-hidden">
-              <CardHeader className="flex flex-row items-center justify-between border-b border-border/40 pb-5 bg-muted/30">
+        {/* Exam Details Section */}
+        {selectedExamId && (
+          <Card className="mb-8 border-l-4 border-l-purple-600">
+            <CardHeader>
+              <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-lg">Detailed Academic Report</CardTitle>
+                  <CardTitle>
+                    {examCards.find(e => e.exam_type_id === selectedExamId)?.exam_type} - Details
+                  </CardTitle>
                   <CardDescription>
-                    Subject-wise breakdown for {examCards.find(e => e.exam_type_id === selectedExamId)?.exam_type}
+                    Click on a card above to view other exams
                   </CardDescription>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSelectedExamId(null)}
-                  className="h-8 w-8 p-0 rounded-full hover:bg-destructive/10 hover:text-destructive"
+                <Button 
+                  onClick={handlePrintPDF}
+                  disabled={exporting}
+                  className="bg-green-600 hover:bg-green-700 text-white"
                 >
-                  <X size={16} />
+                  {exporting ? 'Exporting...' : '📥 Export as PDF'}
                 </Button>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="bg-muted text-muted-foreground text-[10px] font-black uppercase tracking-widest">
-                        <th className="px-8 py-4">Subject Code</th>
-                        <th className="px-8 py-4">Description</th>
-                        <th className="px-8 py-4 text-center">Score</th>
-                        <th className="px-8 py-4 text-center">Outcome</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/50">
-                      {marks.filter(m => m.exam_type_id === selectedExamId).map((mark, idx) => (
-                        <tr key={idx} className="hover:bg-secondary/40 transition-colors group">
-                          <td className="px-8 py-4 font-mono text-xs font-bold text-primary">{mark.subject_code}</td>
-                          <td className="px-8 py-4 font-medium text-foreground">{mark.subject_name}</td>
-                          <td className="px-8 py-4 text-center font-black">{mark.marks}</td>
-                          <td className="px-8 py-4 text-center">
-                            <span className={cn(
-                              "inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-widest",
-                              mark.marks >= 40
-                                ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
-                                : "bg-destructive/10 text-destructive border border-destructive/20"
-                            )}>
-                              {mark.marks >= 40 ? 'PASS' : 'FAIL'}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100">
+                      <th className="border border-slate-300 px-4 py-2 text-left text-sm font-semibold">Subject Code</th>
+                      <th className="border border-slate-300 px-4 py-2 text-left text-sm font-semibold">Subject Name</th>
+                      <th className="border border-slate-300 px-4 py-2 text-center text-sm font-semibold">Marks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {marks
+                      .filter(m => m.exam_type_id === selectedExamId)
+                      .map((mark, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="border border-slate-300 px-4 py-2">{mark.subject_code}</td>
+                          <td className="border border-slate-300 px-4 py-2">{mark.subject_name}</td>
+                          <td className="border border-slate-300 px-4 py-2 text-center font-semibold">
+                            <span className={`px-3 py-1 rounded ${mark.marks >= 40 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                              {mark.marks}
                             </span>
                           </td>
                         </tr>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="p-4 bg-muted/20 border-t border-border/30 flex justify-end">
-                  <Button
-                    onClick={handlePrintPDF}
-                    disabled={exporting}
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2 rounded-xl px-6 font-bold"
-                  >
-                    {exporting ? (
-                      'Generating...'
-                    ) : (
-                      <>
-                        <FileText size={18} />
-                        Export Academic Certificate
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Preview Modal */}
-          <Dialog open={!!previewExamId} onOpenChange={(open) => { if (!open) setPreviewExamId(null) }}>
-            <DialogContent className="max-w-4xl p-0 border-none bg-background shadow-2xl overflow-hidden rounded-2xl">
-              <div className="bg-primary p-6 text-primary-foreground flex items-center justify-between">
-                <div>
-                  <DialogTitle className="text-xl font-bold">Marksheet Preview</DialogTitle>
-                  <p className="text-primary-foreground/70 text-sm mt-1">{previewExamType} Examination</p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setPreviewExamId(null)}
-                  className="text-primary-foreground hover:bg-white/10"
-                >
-                  <X size={20} />
-                </Button>
+                  </tbody>
+                </table>
               </div>
+            </CardContent>
+          </Card>
+        )}
 
-              <div className="p-8 space-y-8">
-                <div
-                  dangerouslySetInnerHTML={{ __html: previewExamId ? getMarksheetHTML(previewExamId, previewExamType) : '' }}
-                  className="bg-white border border-border/50 rounded-xl p-8 max-h-[50vh] overflow-y-auto shadow-inner"
-                />
 
-                <div className="flex gap-4 justify-end">
-                  <Button
-                    onClick={() => setPreviewExamId(null)}
-                    variant="ghost"
-                    className="font-semibold text-muted-foreground px-6"
-                  >
-                    Close Preview
-                  </Button>
-                  <Button
-                    onClick={handleExportFromPreview}
-                    disabled={exporting}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 px-8 rounded-xl font-bold shadow-lg"
-                  >
-                    {exporting ? 'Generating...' : (
-                      <>
-                        <FileText size={18} />
-                        Download PDF Certificate
-                      </>
-                    )}
-                  </Button>
-                </div>
+      </main>
+
+      {/* Preview Modal */}
+      <Dialog open={!!previewExamId} onOpenChange={(open) => { if (!open) setPreviewExamId(null) }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{previewExamType} - Marksheet Preview</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Marksheet Preview */}
+            {previewExamId && (
+              <div className="bg-white border border-slate-200 rounded-lg p-6 max-h-[60vh] overflow-y-auto">
+                <MarksheetPreview examTypeId={previewExamId} examTypeName={previewExamType} />
               </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* Chatbot Integration */}
-          {showChatbot && (
-            <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-10 duration-500">
-              <div className="shadow-2xl rounded-2xl overflow-hidden border border-border bg-card">
-                <Chatbot initiallyOpen={true} onClose={() => setShowChatbot(false)} />
-              </div>
+            )}
+            
+            {/* Action Buttons */}
+            <div className="flex gap-2 justify-end pt-4 border-t">
+              <Button 
+                onClick={() => setPreviewExamId(null)}
+                variant="outline"
+                className="bg-transparent"
+              >
+                Close
+              </Button>
+              <Button 
+                onClick={handleExportFromPreview}
+                disabled={exporting}
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                {exporting ? 'Exporting...' : 'Download as PDF'}
+              </Button>
             </div>
-          )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
-        </>
-      )}
-    </DashboardLayout>
+      <Chatbot initiallyOpen={showChatbot} onClose={() => setShowChatbot(false)} />
+    </div>
   )
 }

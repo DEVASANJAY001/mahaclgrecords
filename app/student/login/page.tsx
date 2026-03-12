@@ -18,13 +18,6 @@ export default function StudentLogin() {
   const router = useRouter()
   const supabase = createClient()
 
-  React.useEffect(() => {
-    const studentId = localStorage.getItem('student_id')
-    if (studentId) {
-      router.push('/student/dashboard')
-    }
-  }, [router])
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -38,6 +31,7 @@ export default function StudentLogin() {
       })
 
       const data = await response.json()
+      console.log('[v0] Student login response:', { status: response.ok, data })
 
       if (!response.ok) {
         setError(data.error || 'Login failed. Please check your roll number, password, and date of birth.')
@@ -48,10 +42,12 @@ export default function StudentLogin() {
       // Store student info in localStorage for client-side access
       localStorage.setItem('student_id', data.student.id)
       localStorage.setItem('student_name', data.student.name)
+      console.log('[v0] Student info stored, redirecting to dashboard')
 
       // Use window.location for more reliable redirect
       window.location.href = '/student/dashboard'
     } catch (err) {
+      console.log('[v0] Student login error:', err)
       setError('An error occurred during login')
       setLoading(false)
     }
@@ -62,9 +58,9 @@ export default function StudentLogin() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <img
-            src="/images/maha-logo.png"
-            alt="College Logo"
+          <img 
+            src="/images/maha-logo.png" 
+            alt="College Logo" 
             className="h-16 w-auto mx-auto mb-4"
           />
           <h1 className="text-2xl font-bold text-slate-900">Student Portal</h1>
@@ -110,8 +106,8 @@ export default function StudentLogin() {
                 />
               </div>
 
-              <Button
-                type="submit"
+              <Button 
+                type="submit" 
                 disabled={loading}
                 className="w-full bg-purple-600 hover:bg-purple-700 text-white"
               >
